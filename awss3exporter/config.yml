@@ -1,0 +1,55 @@
+# 1. CONFIGURE RECEIVERS
+receivers:
+  otlp:
+    protocols:
+      grpc:
+      http:
+
+# 2. CONFIGURE EXPORTERS
+exporters:
+  awss3:
+    # S3 uploader configuration
+    s3uploader:
+      # AWS region your bucket is in
+      region: 'us-east-2'
+      # The name of your S3 bucket
+      s3_bucket: 'otlp-s3-bucket-test'
+      
+      # !!! THIS WAS MISSING !!!
+      # An optional prefix (folder) within your bucket
+      s3_prefix: 'otel-data'
+        
+    # !!! THIS WAS MISSING !!!
+    # How to format the data in S3
+    marshaler: 'otlp_json'
+    
+    # Optional: How to batch files.
+    sending_queue:
+      flush_timeout: 10s
+      num_consumers: 5
+      queue_size: 2000
+
+  # (Optional) You can also add other exporters
+  logging:
+    loglevel: debug
+
+# 3. CONFIGURE THE SERVICE (PIPELINES)
+service:
+  pipelines:
+    # A pipeline for TRACES
+    traces:
+      receivers: [otlp]
+      processors: [] 
+      exporters: [awss3, logging]
+
+    # A pipeline for METRICS
+    metrics:
+      receivers: [otlp]
+      processors: []
+      exporters: [awss3, logging]
+
+    # A pipeline for LOGS
+    logs:
+      receivers: [otlp]
+      processors: []
+      exporters: [awss3, logging]
