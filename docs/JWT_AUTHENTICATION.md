@@ -90,3 +90,135 @@ This implementation provides **defense in depth** with multiple security layers:
 - **No RBAC required** - Full signature verification without cluster-admin permissions
 - **Simple deployment** - No ClusterRole or ClusterRoleBinding needed
 - **Defense in depth** - Multiple security layers (signature + audience + subject + network + expiration)
+
+## Troubleshooting
+
+### JWKS Fetch Timeout Errors
+
+**Problem**: Compass fails to start with errors like "failed to fetch JWKS on startup" or timeout errors when fetching OIDC discovery.
+
+**Root Cause**: Slow network connections or DNS resolution delays can cause JWKS fetching to timeout during startup.
+
+**Solutions**:
+
+1. **Automatic Retry Logic** (built-in since v1.x):
+   - Compass automatically retries JWKS fetch 3 times with exponential backoff (1s, 2s, 4s)
+   - Extended timeout from 10s to 30s for slower networks
+   - If startup retries fail, JWKS will be fetched on first request
+
+2. **Check Logs**:
+   ```
+   level=INFO msg="attempting OIDC discovery" url=https://kubernetes.default.svc/.well-known/openid-configuration
+   level=INFO msg="OIDC discovery request completed" elapsed=5.2s status=200
+   level=INFO msg="successfully fetched JWKS on startup" attempt=1
+   ```
+
+3. **DNS Bypass Mode** (for persistent DNS issues):
+   If you experience ongoing DNS resolution problems, you can bypass DNS and connect directly to the Kubernetes API using its ClusterIP:
+
+   ```yaml
+   env:
+   - name: KUBERNETES_SERVICE_IP
+     value: "10.0.0.1"  # Replace with your cluster's kubernetes.default.svc ClusterIP
+   ```
+
+   To find your Kubernetes API ClusterIP:
+   ```bash
+   kubectl get svc kubernetes -n default -o jsonpath='{.spec.clusterIP}'
+   ```
+
+   **Important**: DNS bypass maintains full TLS security by:
+   - Connecting to the IP address at the network layer (e.g., `10.0.0.1:443`)
+   - Setting SNI (Server Name Indication) to `kubernetes.default.svc` during TLS handshake
+   - Validating the certificate against the hostname, not the IP
+   - This allows secure connections even when DNS resolution fails
+
+### Connection and Network Issues
+
+**Problem**: Intermittent connection failures or "connection reset" errors when fetching JWKS.
+
+**Solutions**:
+
+1. **Secure TLS Configuration** (automatic):
+   - Full certificate validation using Kubernetes CA certificate
+   - Proper SNI (Server Name Indication) set to match Kubernetes certificates
+   - HTTP/2 support enabled for better performance
+   - Connection pooling with keep-alives (10 max idle connections, 30s timeout)
+
+2. **CA Certificate Validation**:
+   - CA certificate validation is performed using `/var/run/secrets/kubernetes.io/serviceaccount/ca.crt`
+   - Ensures all connections to the Kubernetes API are cryptographically verified
+   - No insecure TLS configurations (InsecureSkipVerify is NOT used)
+
+   **Technical Detail - SNI Configuration**:
+   When DNS bypass mode is enabled, Compass connects to the Kubernetes API IP directly (e.g., `10.0.0.1:443`) but the TLS certificate is issued for the hostname (`kubernetes.default.svc`). The SNI field in the TLS configuration is explicitly set to `kubernetes.default.svc` to ensure:
+   - The TLS handshake sends the correct hostname in the SNI extension
+   - Certificate validation checks against the hostname, not the IP address
+   - Secure connections work even when bypassing DNS resolution
+   - This is the correct and secure way to handle IP-based connections with hostname-based certificates
+
+3. **Verify Service Account Mount**:
+   Ensure the service account token and CA cert are properly mounted:
+   ```bash
+   kubectl exec -it <compass-pod> -- ls -la /var/run/secrets/kubernetes.io/serviceaccount/
+   # Should show: ca.crt, namespace, token
+   ```
+
+### Authentication Failures
+
+**Problem**: Requests fail with "invalid token signature" or "authentication failed".
+
+**Check These Common Issues**:
+
+1. **Audience Mismatch**:
+   ```
+   # Verify the audience in both Compass config and Collector token volume match
+   kubectl get secret compass-jwt-audience -o jsonpath='{.data.audience}' | base64 -d
+   ```
+
+2. **Expired Token**:
+   - Ensure Kubernetes is rotating tokens (happens automatically at ~80% of lifetime)
+   - Client must read token file on each request, not cache in memory
+
+3. **Wrong Service Account**:
+   - Verify the token's subject claim matches allowed subjects in Compass config
+   - Check logs for "subject validation failed" messages
+
+4. **Token Not Bound**:
+   - Ensure the client pod has a projected volume with bound service account token
+   - Verify the `audience` field is set in the projected volume configuration
+
+### Debugging with Logs
+
+Compass provides detailed info-level logging for JWT authentication:
+
+```
+level=INFO msg="using standard DNS resolution for Kubernetes API"
+level=INFO msg="fetching JWKS from Kubernetes API server"
+level=INFO msg="attempting OIDC discovery" url=...
+level=INFO msg="OIDC discovery request completed" elapsed=1.2s status=200
+level=INFO msg="using service account token for JWKS authentication"
+level=INFO msg="attempting JWKS fetch" url=...
+level=INFO msg="JWKS fetch completed" elapsed=0.8s status=200
+level=INFO msg="jwt signature verification successful"
+level=INFO msg="jwt audience validation successful"
+level=INFO msg="jwt subject validation successful"
+level=INFO msg="jwt authentication successful"
+```
+
+Enable debug logging to see additional details like issuer, JWKS URI, and claim values.
+
+### Performance Considerations
+
+**JWKS Caching**:
+- Public keys are cached for 1 hour to avoid excessive API calls
+- Cache is automatically refreshed when expired
+- Failed JWKS fetch will use stale cache if available
+
+**Timeouts Configuration**:
+- Overall request timeout: 30s
+- TLS handshake timeout: 10s
+- Response header timeout: 20s
+- DNS/connection timeout: 15s
+
+If you experience slower network conditions, these timeouts should accommodate most scenarios. The retry logic provides additional resilience.
