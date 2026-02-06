@@ -9,6 +9,7 @@ require (
 	github.com/gin-contrib/requestid v1.0.5
 	github.com/gin-gonic/gin v1.11.0
 	github.com/goccy/go-yaml v1.19.2
+	github.com/golang-jwt/jwt/v5 v5.3.1
 	github.com/oapi-codegen/gin-middleware v1.0.2
 	github.com/ossf/gemara v0.12.1
 	github.com/stretchr/testify v1.11.1
