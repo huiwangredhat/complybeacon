@@ -87,8 +87,8 @@ func getJWKSCache() *jwksCache {
 		httpClient, err := createK8sHTTPClient()
 		if err != nil {
 			slog.Error("failed to create HTTP client for JWKS", "error", err)
-			// Fallback to default client
-			httpClient = &http.Client{Timeout: 10 * time.Second}
+			// Fallback to default client with increased timeout
+			httpClient = &http.Client{Timeout: 30 * time.Second}
 		}
 
 		globalJWKSCache = &jwksCache{
@@ -256,12 +256,15 @@ func createK8sHTTPClient() (*http.Client, error) {
 	}
 
 	transport := &http.Transport{
-		TLSClientConfig: tlsConfig,
+		TLSClientConfig:     tlsConfig,
+		MaxIdleConns:        10,
+		IdleConnTimeout:     30 * time.Second,
+		TLSHandshakeTimeout: 10 * time.Second,
 	}
 
 	return &http.Client{
 		Transport: transport,
-		Timeout:   10 * time.Second,
+		Timeout:   30 * time.Second, // Increased from 10s to 30s for slower networks
 	}, nil
 }
 
@@ -270,9 +273,26 @@ func createK8sHTTPClient() (*http.Client, error) {
 func JWTAuthMiddleware(config JWTAuthConfig) gin.HandlerFunc {
 	cache := getJWKSCache()
 
-	// Pre-fetch JWKS on startup
-	if err := cache.fetchJWKS(); err != nil {
-		slog.Error("failed to fetch JWKS on startup", "error", err)
+	// Pre-fetch JWKS on startup with retry logic
+	// Retry up to 3 times with exponential backoff (1s, 2s, 4s)
+	var lastErr error
+	for attempt := 1; attempt <= 3; attempt++ {
+		if err := cache.fetchJWKS(); err != nil {
+			lastErr = err
+			slog.Warn("failed to fetch JWKS on startup", "attempt", attempt, "error", err)
+			if attempt < 3 {
+				backoff := time.Duration(1<<uint(attempt-1)) * time.Second
+				slog.Info("retrying JWKS fetch", "backoff", backoff)
+				time.Sleep(backoff)
+			}
+		} else {
+			lastErr = nil
+			slog.Info("successfully fetched JWKS on startup", "attempt", attempt)
+			break
+		}
+	}
+	if lastErr != nil {
+		slog.Error("failed to fetch JWKS after retries, will retry on first request", "error", lastErr)
 	}
 
 	return func(c *gin.Context) {
