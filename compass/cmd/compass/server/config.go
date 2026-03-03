@@ -40,25 +40,25 @@ func NewScopeFromCatalogPath(catalogPath string) (mapper.Scope, error) {
 }
 
 type Config struct {
-	Plugins     []PluginConfig `json:"plugins"`
-	Certificate CertConfig     `json:"certConfig"`
-	JWTAuth     JWTAuthConfig  `json:"jwtAuth"`
+	Plugins     []PluginConfig `json:"plugins" yaml:"plugins"`
+	Certificate CertConfig     `json:"certConfig" yaml:"certConfig"`
+	JWTAuth     JWTAuthConfig  `json:"jwtAuth" yaml:"jwtAuth"`
 }
 
 type JWTAuthConfig struct {
-	Enabled          bool     `json:"enabled"`
-	ExpectedAudience string   `json:"expectedAudience"`
-	AllowedSubjects  []string `json:"allowedSubjects"`
+	Enabled          bool     `json:"enabled" yaml:"enabled"`
+	ExpectedAudience string   `json:"expectedAudience" yaml:"expectedAudience"`
+	AllowedSubjects  []string `json:"allowedSubjects" yaml:"allowedSubjects"`
 }
 
 type CertConfig struct {
-	PublicKey  string `json:"cert"`
-	PrivateKey string `json:"key"`
+	PublicKey  string `json:"cert" yaml:"cert"`
+	PrivateKey string `json:"key" yaml:"key"`
 }
 
 type PluginConfig struct {
-	Id             string `json:"id"`
-	EvaluationsDir string `json:"evaluations-dir"`
+	Id             string `json:"id" yaml:"id"`
+	EvaluationsDir string `json:"evaluations-dir" yaml:"evaluations-dir"`
 }
 
 func NewMapperSet(config *Config) (mapper.Set, error) {

@@ -38,7 +38,7 @@ A central enrichment service that provides risk, threat, and compliance framewor
 
 ## Quick Start
 
-Before Deploying: Please read the following **NOTE**.
+Before Deploying: Please read the following **NOTEs**.
 
 ⚠️ **NOTE:**
 To enable evidence log synchronization to AWS S3 and Hyperproof, you must configure the following environment variables. The collector will fail to start if the S3 configuration is invalid.
@@ -110,7 +110,10 @@ exporters:
 
 B. **Comment collector.environment part of [compose.yml](compose.yaml)** as the AWS S3 environment variables will no longer be needed.
 
-Once you've reviewed the **NOTE** above, follow these steps to deploy the infrastructure and test the pipeline.
+⚠️ **NOTE:**
+To disable JWT in `compass` for local deployments, ensure jwtAuth is set to false in [hack/demo/config.yaml](hack/demo/config.yaml).
+
+Once you've reviewed the **NOTEs** above, follow these steps to deploy the infrastructure and test the pipeline.
 
 1. **Deploy the Stack:**
     This command builds and starts the full infrastructure, including Grafana, Loki, the custom collector (`Beacon`), and the `Compass` service.

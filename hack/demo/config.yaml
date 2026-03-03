@@ -5,3 +5,8 @@ plugins:
 certConfig:
   cert: /certs/compass.crt
   key: /certs/compass.key
+
+# Add this block to control JWT
+jwtAuth:
+  enabled: true
+  # enabled: false
